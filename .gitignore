@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+python-installer.exe
+applications.log
+applications.csv
+screenshots/
+.env
+.pytest_cache/
+.vscode/
+.idea/
