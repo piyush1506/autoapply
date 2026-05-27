@@ -144,11 +144,6 @@ def api_stream():
             if frame:
                 yield (b'--frame\r\n'
                        b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-            else:
-                # 1x1 transparent GIF if no frame is available yet
-                empty_gif = b'GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;'
-                yield (b'--frame\r\n'
-                       b'Content-Type: image/gif\r\n\r\n' + empty_gif + b'\r\n')
             time.sleep(0.5)
 
     from flask import Response

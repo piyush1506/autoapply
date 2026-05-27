@@ -134,8 +134,8 @@ def update_live_screenshot(page=None):
     try:
         frame = p.screenshot(type="jpeg", quality=40)
         bot_state.latest_frame = frame
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Screenshot Error: {e}")
 
 
 def safe_click(page, selector: str, timeout: int = 5000):
