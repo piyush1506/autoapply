@@ -25,6 +25,8 @@ class BotState:
         self.logs: list[dict] = []
         self.started_at: datetime | None = None
         self.last_status = "idle"      # idle | running | stopping | completed | error
+        self.latest_frame: bytes | None = None
+        self.current_page = None
         self._lock = threading.Lock()
 
     # ── log helpers ──────────────────────────────────────────

@@ -148,6 +148,11 @@ def run_agent(platform_filter: str = None):
         """)
 
         page = context.new_page()
+        bot_state.current_page = page
+
+        # Auto-update live preview on page load
+        from utils import update_live_screenshot
+        page.on("load", lambda p: update_live_screenshot(p))
 
         try:
             # ── Internshala ──────────────────────────────────

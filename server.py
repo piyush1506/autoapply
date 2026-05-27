@@ -135,6 +135,26 @@ def api_logs():
     })
 
 
+@app.route("/api/stream")
+def api_stream():
+    """MJPEG stream endpoint for the live browser view."""
+    def generate():
+        while True:
+            frame = state.latest_frame
+            if frame:
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+            else:
+                # 1x1 transparent GIF if no frame is available yet
+                empty_gif = b'GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;'
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/gif\r\n\r\n' + empty_gif + b'\r\n')
+            time.sleep(0.5)
+
+    from flask import Response
+    return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  DASHBOARD HTML
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -300,12 +320,51 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
   }
   .stat-label { font-size:.75rem; color:#7878a0; margin-top:4px; text-transform:uppercase; letter-spacing:1px; }
 
+  /* ── Content Split (Video + Logs) ─────────────── */
+  .content-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    align-items: stretch;
+  }
+  .content-split .panel {
+    margin-bottom: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  /* ── Video Feed ───────────────────────────────── */
+  .video-container {
+    flex: 1;
+    background: #000;
+    border: 1px solid rgba(255,255,255,.06);
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .video-container img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+  .video-overlay-text {
+    position: absolute;
+    color: #4b4b6a;
+    font-size: .9rem;
+    font-family: 'Inter', sans-serif;
+  }
+
   /* ── Log Viewer ───────────────────────────────── */
   .log-viewer {
     background: rgba(0,0,0,.35);
     border: 1px solid rgba(255,255,255,.06);
     border-radius: 12px;
     height: 380px;
+    flex: 1;
     overflow-y: auto;
     padding: 16px;
     font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
@@ -333,11 +392,15 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
   .footer { text-align:center; margin-top:32px; color:#4b4b6a; font-size:.78rem; }
 
   /* ── Responsive ───────────────────────────────── */
+  @media (max-width:900px) {
+    .content-split { grid-template-columns: 1fr; }
+    .video-container { height: 380px; }
+  }
   @media (max-width:600px) {
     .header h1 { font-size:1.8rem; }
     .controls .left { flex-direction:column; }
     .stats-grid { grid-template-columns: repeat(2,1fr); }
-    .log-viewer { height:280px; }
+    .log-viewer, .video-container { height:280px; }
   }
 </style>
 </head>
@@ -404,11 +467,23 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     </div>
   </div>
 
-  <!-- Logs -->
-  <div class="panel">
-    <div class="panel-title">Live Logs</div>
-    <div class="log-viewer" id="logViewer">
-      <div class="log-empty" id="logEmpty">Click <strong style="margin:0 4px;">Start</strong> to begin applying…</div>
+  <!-- Content Split -->
+  <div class="content-split">
+    <!-- Video Feed -->
+    <div class="panel">
+      <div class="panel-title">Live Browser</div>
+      <div class="video-container" id="videoContainer">
+        <div class="video-overlay-text" id="videoOverlay">Waiting for bot to start...</div>
+        <img id="liveStream" src="" style="display:none;" alt="Live Feed" onerror="this.style.display='none'; document.getElementById('videoOverlay').style.display='block';">
+      </div>
+    </div>
+
+    <!-- Logs -->
+    <div class="panel">
+      <div class="panel-title">Live Logs</div>
+      <div class="log-viewer" id="logViewer">
+        <div class="log-empty" id="logEmpty">Click <strong style="margin:0 4px;">Start</strong> to begin applying…</div>
+      </div>
     </div>
   </div>
 
@@ -449,6 +524,13 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
       logOffset = 0;
       $logView.innerHTML = '';
       $logEmpty?.remove();
+      
+      // Start Video stream
+      document.getElementById('videoOverlay').style.display = 'none';
+      const img = document.getElementById('liveStream');
+      img.style.display = 'block';
+      img.src = '/api/stream?' + Date.now();
+      
     } catch (e) {
       $start.disabled = false;
       console.error(e);
@@ -460,6 +542,12 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     try {
       $stop.disabled = true;
       await api('/api/stop', { method: 'POST' });
+      // Clear video
+      document.getElementById('liveStream').src = '';
+      document.getElementById('liveStream').style.display = 'none';
+      const overlay = document.getElementById('videoOverlay');
+      overlay.textContent = "Bot stopped.";
+      overlay.style.display = 'block';
     } catch (e) {
       console.error(e);
     }

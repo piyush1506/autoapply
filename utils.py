@@ -94,19 +94,24 @@ def count_applied_today() -> int:
 
 # ── Human-like Helpers ────────────────────────────────────────
 def human_delay(min_s: float = 2.0, max_s: float = 5.0):
-    """Sleep a random amount to mimic human speed, checking for stop requests."""
+    """Sleep a random amount to mimic human speed, capturing screenshots."""
     from bot_state import state as bot_state, StopRequestedException
     if bot_state.should_stop():
         raise StopRequestedException("Stop requested by user")
 
     t = random.uniform(min_s, max_s)
-    step = 0.1
+    step = 0.5  # Capture frame every 0.5s during idle
     elapsed = 0.0
     while elapsed < t:
         if bot_state.should_stop():
             raise StopRequestedException("Stop requested by user")
-        time.sleep(min(step, t - elapsed))
-        elapsed += step
+        
+        # Take live screenshot if page is available
+        update_live_screenshot()
+        
+        sleep_time = min(step, t - elapsed)
+        time.sleep(sleep_time)
+        elapsed += sleep_time
 
 
 def human_type(page, selector: str, text: str, clear: bool = True):
@@ -117,15 +122,32 @@ def human_type(page, selector: str, text: str, clear: bool = True):
     for char in text:
         el.type(char, delay=random.randint(40, 130))
     human_delay(0.3, 0.8)
+    update_live_screenshot(page)
+
+
+def update_live_screenshot(page=None):
+    """Capture the current page view into memory for the live dashboard stream."""
+    from bot_state import state as bot_state
+    p = page or bot_state.current_page
+    if not p:
+        return
+    try:
+        frame = p.screenshot(type="jpeg", quality=40)
+        bot_state.latest_frame = frame
+    except Exception:
+        pass
 
 
 def safe_click(page, selector: str, timeout: int = 5000):
     """Click an element safely, return True if successful."""
     try:
         page.locator(selector).first.click(timeout=timeout)
+        update_live_screenshot(page)
         human_delay(0.5, 1.5)
         return True
-    except Exception:
+    except BaseException as e:
+        if isinstance(e, SystemExit) or type(e).__name__ == "StopRequestedException":
+            raise
         return False
 
 
@@ -135,9 +157,12 @@ def fill_if_visible(page, selector: str, value: str):
         el = page.locator(selector).first
         if el.is_visible(timeout=2000):
             el.fill(value)
+            update_live_screenshot(page)
             human_delay(0.2, 0.6)
             return True
-    except Exception:
+    except BaseException as e:
+        if isinstance(e, SystemExit) or type(e).__name__ == "StopRequestedException":
+            raise
         pass
     return False
 
